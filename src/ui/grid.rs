@@ -143,9 +143,8 @@ impl TableGrid {
             .collect();
 
         let local = (self.cursor - self.window_start) as usize;
-        let widths: Vec<Constraint> = std::iter::repeat(Constraint::Fill(1))
-            .take(self.columns.len().max(1))
-            .collect();
+        let widths: Vec<Constraint> =
+            std::iter::repeat_n(Constraint::Fill(1), self.columns.len().max(1)).collect();
 
         let title = format!(" {} — {} rows ", self.table, self.total);
 

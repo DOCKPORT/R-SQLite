@@ -21,7 +21,7 @@ pub fn command_for_key(code: KeyCode) -> Option<Command> {
     match code {
         KeyCode::Up => Some(Command::MoveUp),
         KeyCode::Down => Some(Command::MoveDown),
-        KeyCode::Enter => Some(Command::Open),
+        KeyCode::Right => Some(Command::Open),
         KeyCode::Left => Some(Command::Back),
         KeyCode::Char('x') => Some(Command::Quit),
         _ => None,
@@ -30,7 +30,7 @@ pub fn command_for_key(code: KeyCode) -> Option<Command> {
 
 /// Help text for the table list footer.
 pub fn help_for_list() -> &'static str {
-    "Up/Down: move | Enter: open | x: exit"
+    "Up/Down: move | Right: open | x: exit"
 }
 
 /// Help text for the row grid footer.
