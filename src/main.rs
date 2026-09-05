@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let db = Database::open_read_only(&args.db_path)?;
-    let mut app = App::new(&db, args.db_path.display().to_string());
+    let mut app = App::new(db, args.db_path.display().to_string());
 
     let terminal = tui::init()?;
     app.run(terminal)
