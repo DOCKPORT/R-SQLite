@@ -43,7 +43,8 @@ impl TableList {
                 .get(self.list_index)
                 .cloned()
                 .map(Action::OpenTable),
-            Command::Back => None,
+            Command::Back => Some(Action::BackToPicker),
+            Command::Type(_) | Command::EraseChar => None,
             Command::Quit => Some(Action::Quit),
         }
     }

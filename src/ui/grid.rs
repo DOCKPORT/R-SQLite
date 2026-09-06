@@ -64,6 +64,7 @@ impl TableGrid {
             }
             Command::Open => None,
             Command::Back => Some(Action::BackToList),
+            Command::Type(_) | Command::EraseChar => None,
             Command::Quit => Some(Action::Quit),
         }
     }

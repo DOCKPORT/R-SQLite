@@ -9,3 +9,4 @@ clap = { version = "4", features = ["derive"] }
 crossterm = "0.29"
 ratatui = "0.26.3"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
+walkdir = "2"

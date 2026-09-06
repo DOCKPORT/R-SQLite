@@ -9,6 +9,10 @@ pub enum Action {
     Quit,
     /// Open the named table into the row grid.
     OpenTable(String),
+    /// Open the chosen database file into the browse screens.
+    PickDatabase(String),
     /// Return from the row grid to the table list.
     BackToList,
+    /// Return from the table list to the directory picker.
+    BackToPicker,
 }
