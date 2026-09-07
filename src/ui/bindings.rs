@@ -24,6 +24,10 @@ pub enum Command {
     OrderAsc,
     /// Sort the grid descending (newest first) by the chosen column.
     OrderDesc,
+    /// Jump 50 rows up.
+    PageUp,
+    /// Jump 50 rows down.
+    PageDown,
     /// Exit the application.
     Quit,
 }
@@ -32,8 +36,9 @@ pub enum Command {
 ///
 /// `Esc` is the single exit key. Plain arrows move/scroll and confirm. Holding
 /// Shift changes meaning: Shift+Left/Right pick the sort column and
-/// Shift+Up/Down set the sort direction. `Enter` is left unmapped here: it is
-/// only used to submit the directory path while typing.
+/// Shift+Up/Down set the sort direction. PgUp/PgDn (with or without Shift) jump
+/// 50 rows, since many terminals do not report Shift on those keys. `Enter` is
+/// left unmapped here: it is only used to submit the directory path while typing.
 pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
     if code == KeyCode::Esc {
         return Some(Command::Quit);
@@ -68,6 +73,8 @@ pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
                 Some(Command::Back)
             }
         }
+        KeyCode::PageUp => Some(Command::PageUp),
+        KeyCode::PageDown => Some(Command::PageDown),
         _ => None,
     }
 }
@@ -91,7 +98,7 @@ pub fn help_for_list() -> &'static str {
 
 /// Help text for the row grid footer.
 pub fn help_for_grid() -> &'static str {
-    "Up/Down: scroll | Shift+Left/Right: order column | Shift+Up/Down: sort | Left: back | Esc: exit"
+    "Up/Down: scroll | PgUp/PgDn: 50 rows | Shift+arrows: column+sort | Left: back | Esc: exit"
 }
 
 /// Help text while typing a directory path in the picker.

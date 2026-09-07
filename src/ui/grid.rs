@@ -10,6 +10,8 @@ use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
 const PAGE_ROWS: i64 = 300;
 /// Number of rows to keep loaded above the cursor as a scroll margin.
 const PAGE_MARGIN: i64 = PAGE_ROWS / 2;
+/// How many rows one page key jumps at a time.
+const PAGE_JUMP: isize = 50;
 
 /// Direction of the current sort.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +107,14 @@ impl TableGrid {
                 self.set_order(db, Order::Desc);
                 None
             }
+            Command::PageUp => {
+                self.page_up(db);
+                None
+            }
+            Command::PageDown => {
+                self.page_down(db);
+                None
+            }
             Command::Quit => Some(Action::Quit),
         }
     }
@@ -124,7 +134,7 @@ impl TableGrid {
         self.total
     }
 
-    /// Move the highlight and re-query the window when it leaves the buffer.
+    /// Move the highlight by one row and keep it inside the visible window.
     fn move_rows(&mut self, db: &Database, delta: isize) {
         let next = (self.cursor + delta as i64).clamp(0, (self.total - 1).max(0));
         if next == self.cursor {
@@ -133,6 +143,36 @@ impl TableGrid {
         self.cursor = next;
         self.reload(db);
         self.keep_cursor_visible();
+    }
+
+    /// Jump 50 rows up and pin the highlight to the top row of the view.
+    fn page_up(&mut self, db: &Database) {
+        if self.total <= 0 {
+            return;
+        }
+        self.cursor = (self.cursor - PAGE_JUMP as i64).max(0);
+        self.reload(db);
+        let local = self.local_row();
+        self.scroll_top = local.min(self.buffer.len().saturating_sub(1));
+    }
+
+    /// Jump 50 rows down and pin the highlight to the bottom row of the view.
+    fn page_down(&mut self, db: &Database) {
+        if self.total <= 0 {
+            return;
+        }
+        self.cursor = (self.cursor + PAGE_JUMP as i64).min(self.total - 1);
+        self.reload(db);
+        let height = self.viewport_rows.max(1);
+        let local = self.local_row();
+        let max_scroll = self.buffer.len().saturating_sub(1);
+        self.scroll_top = (local + 1).saturating_sub(height).min(max_scroll);
+    }
+
+    /// Index of the highlight within the loaded buffer, clamped to the buffer.
+    fn local_row(&self) -> usize {
+        let local = (self.cursor - self.window_start).max(0) as usize;
+        local.min(self.buffer.len().saturating_sub(1))
     }
 
     /// Move the chosen sort column left or right. Re-sorts if sorting is on.

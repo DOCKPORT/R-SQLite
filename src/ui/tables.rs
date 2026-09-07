@@ -48,7 +48,9 @@ impl TableList {
             Command::SortColumnLeft
             | Command::SortColumnRight
             | Command::OrderAsc
-            | Command::OrderDesc => None,
+            | Command::OrderDesc
+            | Command::PageUp
+            | Command::PageDown => None,
             Command::Quit => Some(Action::Quit),
         }
     }
