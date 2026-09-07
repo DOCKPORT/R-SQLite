@@ -4,12 +4,30 @@ use crate::ui::bindings::Command;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
 
 /// How many rows the grid buffers around the cursor at once.
 const PAGE_ROWS: i64 = 300;
 /// Number of rows to keep loaded above the cursor as a scroll margin.
 const PAGE_MARGIN: i64 = PAGE_ROWS / 2;
+
+/// Direction of the current sort.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Order {
+    /// Smallest values first (oldest first for a time column).
+    Asc,
+    /// Largest values first (newest first for a time column).
+    Desc,
+}
+
+impl Order {
+    fn marker(self) -> &'static str {
+        match self {
+            Order::Asc => " ^",
+            Order::Desc => " v",
+        }
+    }
+}
 
 /// The row grid for one opened table.
 pub struct TableGrid {
@@ -29,6 +47,10 @@ pub struct TableGrid {
     scroll_top: usize,
     /// Rows that fit in the data area, used to keep the highlight visible.
     viewport_rows: usize,
+    /// Index of the column chosen as the sort key.
+    sort_col: usize,
+    /// The active sort direction, if sorting is on.
+    order: Option<Order>,
 }
 
 impl TableGrid {
@@ -45,6 +67,8 @@ impl TableGrid {
             buffer: Vec::new(),
             scroll_top: 0,
             viewport_rows: 20,
+            sort_col: 0,
+            order: None,
         };
         grid.reload(db);
         grid
@@ -65,6 +89,22 @@ impl TableGrid {
             Command::Open => None,
             Command::Back => Some(Action::BackToList),
             Command::Type(_) | Command::EraseChar => None,
+            Command::SortColumnLeft => {
+                self.move_sort_col(db, -1);
+                None
+            }
+            Command::SortColumnRight => {
+                self.move_sort_col(db, 1);
+                None
+            }
+            Command::OrderAsc => {
+                self.set_order(db, Order::Asc);
+                None
+            }
+            Command::OrderDesc => {
+                self.set_order(db, Order::Desc);
+                None
+            }
             Command::Quit => Some(Action::Quit),
         }
     }
@@ -84,6 +124,7 @@ impl TableGrid {
         self.total
     }
 
+    /// Move the highlight and re-query the window when it leaves the buffer.
     fn move_rows(&mut self, db: &Database, delta: isize) {
         let next = (self.cursor + delta as i64).clamp(0, (self.total - 1).max(0));
         if next == self.cursor {
@@ -92,6 +133,36 @@ impl TableGrid {
         self.cursor = next;
         self.reload(db);
         self.keep_cursor_visible();
+    }
+
+    /// Move the chosen sort column left or right. Re-sorts if sorting is on.
+    fn move_sort_col(&mut self, db: &Database, delta: isize) {
+        if self.columns.is_empty() {
+            return;
+        }
+        let next = self.sort_col as isize + delta;
+        self.sort_col = next.clamp(0, self.columns.len() as isize - 1) as usize;
+        if self.order.is_some() {
+            self.reset_to_top(db);
+        }
+    }
+
+    /// Set the sort direction for the chosen column and show the sorted top.
+    fn set_order(&mut self, db: &Database, direction: Order) {
+        if self.columns.is_empty() {
+            return;
+        }
+        self.order = Some(direction);
+        self.reset_to_top(db);
+    }
+
+    /// Clear the loaded window and go back to the first sorted row.
+    fn reset_to_top(&mut self, db: &Database) {
+        self.cursor = 0;
+        self.window_start = 0;
+        self.scroll_top = 0;
+        self.buffer.clear();
+        self.reload(db);
     }
 
     /// Reload the buffer when the cursor moves outside the loaded window.
@@ -104,9 +175,25 @@ impl TableGrid {
         }
         let max_start = (self.total - 1).max(0);
         let start = (self.cursor - PAGE_MARGIN).clamp(0, max_start);
-        self.buffer = db.rows(&self.table, start, PAGE_ROWS).unwrap_or_default();
+        self.buffer = self.query_rows(db, start).unwrap_or_default();
         self.window_start = start;
         self.scroll_top = 0;
+    }
+
+    /// Fetch one window, ordered by the active sort when one is set.
+    fn query_rows(&self, db: &Database, start: i64) -> anyhow::Result<Vec<Vec<String>>> {
+        match self.order {
+            Some(Order::Asc) | Some(Order::Desc) => {
+                let column = self
+                    .columns
+                    .get(self.sort_col)
+                    .map(|c| c.name.as_str())
+                    .unwrap_or("");
+                let ascending = self.order == Some(Order::Asc);
+                db.rows_sorted(&self.table, column, ascending, start, PAGE_ROWS)
+            }
+            None => db.rows(&self.table, start, PAGE_ROWS),
+        }
     }
 
     /// Keep the highlighted row inside the visible part of the data area.
@@ -125,12 +212,25 @@ impl TableGrid {
         // Rows available below the top border and the header row.
         self.viewport_rows = area.height.saturating_sub(3) as usize;
 
-        let header_cells: Vec<String> = self
+        let base_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+        let chosen_style = base_style.bg(Color::LightBlue);
+
+        let header_cells: Vec<Cell> = self
             .columns
             .iter()
-            .map(|column| match &column.decl_type {
-                Some(ty) if !ty.is_empty() => format!("{} ({})", column.name, ty),
-                _ => column.name.clone(),
+            .enumerate()
+            .map(|(index, column)| {
+                let mut text = column.name.clone();
+                if index == self.sort_col {
+                    if let Some(direction) = self.order {
+                        text.push_str(direction.marker());
+                    }
+                    Cell::from(text).style(chosen_style)
+                } else {
+                    Cell::from(text).style(base_style)
+                }
             })
             .collect();
 
@@ -150,13 +250,7 @@ impl TableGrid {
         let title = format!(" {} — {} rows ", self.table, self.total);
 
         let table = Table::new(rows, widths)
-            .header(
-                Row::new(header_cells).style(
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            )
+            .header(Row::new(header_cells))
             .highlight_style(
                 Style::default()
                     .bg(Color::Blue)

@@ -3,11 +3,10 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags, params};
 use std::path::Path;
 
-/// A single column of a table: its name and declared SQLite type.
+/// A single column of a table: its name.
 #[derive(Debug, Clone)]
 pub struct Column {
     pub name: String,
-    pub decl_type: Option<String>,
 }
 
 /// A read-only view into a SQLite database file.
@@ -53,13 +52,8 @@ impl Database {
     pub fn columns(&self, table: &str) -> Result<Vec<Column>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT name, type FROM pragma_table_info(?1) ORDER BY cid")?;
-        let cols = stmt.query_map(params![table], |row| {
-            Ok(Column {
-                name: row.get(0)?,
-                decl_type: row.get(1)?,
-            })
-        })?;
+            .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")?;
+        let cols = stmt.query_map(params![table], |row| Ok(Column { name: row.get(0)? }))?;
         Ok(cols.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -76,7 +70,34 @@ impl Database {
     /// Only this small window is materialized, so large tables stay cheap.
     pub fn rows(&self, table: &str, offset: i64, limit: i64) -> Result<Vec<Vec<String>>> {
         let sql = format!("SELECT * FROM {} LIMIT ?1 OFFSET ?2", quote_ident(table));
-        let mut stmt = self.conn.prepare(&sql)?;
+        self.fetch_window(&sql, offset, limit)
+    }
+
+    /// Fetch a window of rows ordered by one column, ascending or descending.
+    ///
+    /// The ORDER BY applies to the whole table, so the offset indexes into the
+    /// sorted result. Only the requested window is materialized.
+    pub fn rows_sorted(
+        &self,
+        table: &str,
+        column: &str,
+        ascending: bool,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Vec<String>>> {
+        let dir = if ascending { "ASC" } else { "DESC" };
+        let sql = format!(
+            "SELECT * FROM {} ORDER BY {} {} LIMIT ?1 OFFSET ?2",
+            quote_ident(table),
+            quote_ident(column),
+            dir
+        );
+        self.fetch_window(&sql, offset, limit)
+    }
+
+    /// Run a LIMIT/OFFSET window query and render each row as text.
+    fn fetch_window(&self, sql: &str, offset: i64, limit: i64) -> Result<Vec<Vec<String>>> {
+        let mut stmt = self.conn.prepare(sql)?;
         let column_count = stmt.column_count();
         let mut query = stmt.query(params![limit, offset])?;
 

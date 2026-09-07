@@ -25,6 +25,10 @@ pub struct Picker {
     results: Vec<PathBuf>,
     /// Index of the highlighted database in `results`.
     selected: usize,
+    /// Index of the first row shown in the database list (its scroll position).
+    scroll_offset: usize,
+    /// Number of rows that fit in the list area, refreshed on every draw.
+    list_height: usize,
     /// Message shown under the input (guidance, errors, or counts).
     status: Option<String>,
 }
@@ -37,6 +41,8 @@ impl Picker {
             input: String::new(),
             results: Vec::new(),
             selected: 0,
+            scroll_offset: 0,
+            list_height: 10,
             status: Some("Paste a directory path, then press Enter.".to_string()),
         }
     }
@@ -96,6 +102,10 @@ impl Picker {
                 self.move_selection(1);
                 None
             }
+            Command::SortColumnLeft
+            | Command::SortColumnRight
+            | Command::OrderAsc
+            | Command::OrderDesc => None,
             Command::Quit => Some(Action::Quit),
         }
     }
@@ -115,6 +125,7 @@ impl Picker {
             Ok(found) => {
                 self.results = found;
                 self.selected = 0;
+                self.scroll_offset = 0;
                 self.state = PickerState::DatabaseList;
                 self.status = None;
                 None
@@ -132,6 +143,24 @@ impl Picker {
         }
         let next = self.selected as isize + delta;
         self.selected = next.clamp(0, self.results.len() as isize - 1) as usize;
+        self.keep_selected_visible();
+    }
+
+    /// Move the list so the highlight stays inside the visible area, scrolling
+    /// only when the highlight would leave it. This mirrors the row grid.
+    fn keep_selected_visible(&mut self) {
+        if self.results.is_empty() {
+            self.scroll_offset = 0;
+            return;
+        }
+        let height = self.list_height.max(1);
+        let max_offset = self.results.len().saturating_sub(height);
+        if self.selected < self.scroll_offset {
+            self.scroll_offset = self.selected;
+        } else if self.selected >= self.scroll_offset + height {
+            self.scroll_offset = self.selected + 1 - height;
+        }
+        self.scroll_offset = self.scroll_offset.clamp(0, max_offset);
     }
 
     /// Draw the picker into the given area.
@@ -193,9 +222,16 @@ impl Picker {
                 }
                 let list_title = format!(" {} database(s) found ", self.results.len());
                 let root = self.input.trim();
-                let items: Vec<ListItem> = self
+                let inner_height = rows[3].height.saturating_sub(2) as usize;
+                self.list_height = inner_height.max(1);
+                let len = self.results.len();
+                let start = self.scroll_offset.min(len);
+                let take = inner_height.min(len - start);
+                let visible: Vec<ListItem> = self
                     .results
                     .iter()
+                    .skip(start)
+                    .take(take)
                     .map(|path| {
                         let label = path
                             .strip_prefix(root)
@@ -205,17 +241,18 @@ impl Picker {
                         ListItem::new(Text::raw(label))
                     })
                     .collect();
-                let list = List::new(items)
+                let list = List::new(visible)
                     .highlight_symbol("> ")
                     .highlight_style(
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::LightGreen)
+                            .bg(Color::Blue)
                             .add_modifier(Modifier::BOLD),
                     )
                     .block(Block::default().title(list_title));
                 let mut state = ListState::default();
-                state.select(Some(self.selected));
+                if let Some(local) = self.selected.checked_sub(start) {
+                    state.select(Some(local));
+                }
                 frame.render_stateful_widget(list, rows[3], &mut state);
             }
         }

@@ -106,7 +106,7 @@ impl App {
             return Ok(());
         }
 
-        let Some(command) = self.map_command(key.code) else {
+        let Some(command) = self.map_command(key.code, key.modifiers) else {
             return Ok(());
         };
 
@@ -126,11 +126,11 @@ impl App {
     /// Choose which key mapping applies. While the picker is accepting a typed
     /// directory, characters and editing keys go through the text mapping so
     /// that, for example, `x` types a letter instead of quitting.
-    fn map_command(&self, code: KeyCode) -> Option<Command> {
+    fn map_command(&self, code: KeyCode, mods: KeyModifiers) -> Option<Command> {
         if self.db.is_none() && self.picker.is_typing() {
-            bindings::command_for_text_key(code)
+            bindings::command_for_text_key(code, mods)
         } else {
-            bindings::command_for_key(code)
+            bindings::command_for_key(code, mods)
         }
     }
 

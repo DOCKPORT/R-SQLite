@@ -45,6 +45,10 @@ impl TableList {
                 .map(Action::OpenTable),
             Command::Back => Some(Action::BackToPicker),
             Command::Type(_) | Command::EraseChar => None,
+            Command::SortColumnLeft
+            | Command::SortColumnRight
+            | Command::OrderAsc
+            | Command::OrderDesc => None,
             Command::Quit => Some(Action::Quit),
         }
     }

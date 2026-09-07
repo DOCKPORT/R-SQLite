@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 /// The single vocabulary of user actions. Keys map to these, and screens act
 /// on them. This file is the one source of truth for keyboard commands.
@@ -16,30 +16,65 @@ pub enum Command {
     Type(char),
     /// Delete the last typed character (text entry only).
     EraseChar,
+    /// Pick the previous column as the sort key.
+    SortColumnLeft,
+    /// Pick the next column as the sort key.
+    SortColumnRight,
+    /// Sort the grid ascending (oldest first) by the chosen column.
+    OrderAsc,
+    /// Sort the grid descending (newest first) by the chosen column.
+    OrderDesc,
     /// Exit the application.
     Quit,
 }
 
-/// Map a navigation or action key to a [`Command`]. Keys not listed do nothing.
+/// Map a key to a [`Command`]. Keys not listed do nothing.
 ///
-/// `Esc` is the single exit key in every screen. `Enter` is left unmapped here:
-/// it is only used to submit the directory path while typing (see
-/// [`command_for_text_key`]). Confirming or opening uses the Right arrow.
-pub fn command_for_key(code: KeyCode) -> Option<Command> {
+/// `Esc` is the single exit key. Plain arrows move/scroll and confirm. Holding
+/// Shift changes meaning: Shift+Left/Right pick the sort column and
+/// Shift+Up/Down set the sort direction. `Enter` is left unmapped here: it is
+/// only used to submit the directory path while typing.
+pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
+    if code == KeyCode::Esc {
+        return Some(Command::Quit);
+    }
+    let shifted = mods.contains(KeyModifiers::SHIFT);
     match code {
-        KeyCode::Esc => Some(Command::Quit),
-        KeyCode::Up => Some(Command::MoveUp),
-        KeyCode::Down => Some(Command::MoveDown),
-        KeyCode::Right => Some(Command::Open),
-        KeyCode::Left => Some(Command::Back),
+        KeyCode::Up => {
+            if shifted {
+                Some(Command::OrderDesc)
+            } else {
+                Some(Command::MoveUp)
+            }
+        }
+        KeyCode::Down => {
+            if shifted {
+                Some(Command::OrderAsc)
+            } else {
+                Some(Command::MoveDown)
+            }
+        }
+        KeyCode::Right => {
+            if shifted {
+                Some(Command::SortColumnRight)
+            } else {
+                Some(Command::Open)
+            }
+        }
+        KeyCode::Left => {
+            if shifted {
+                Some(Command::SortColumnLeft)
+            } else {
+                Some(Command::Back)
+            }
+        }
         _ => None,
     }
 }
 
 /// Map a key to a [`Command`] while the user is typing free text (for example
-/// a directory path). Esc still exits; every character, including lowercase
-/// `x`, is inserted as text.
-pub fn command_for_text_key(code: KeyCode) -> Option<Command> {
+/// a directory path). Esc still exits; every character is inserted as text.
+pub fn command_for_text_key(code: KeyCode, _mods: KeyModifiers) -> Option<Command> {
     match code {
         KeyCode::Esc => Some(Command::Quit),
         KeyCode::Char(c) if !c.is_control() => Some(Command::Type(c)),
@@ -56,7 +91,7 @@ pub fn help_for_list() -> &'static str {
 
 /// Help text for the row grid footer.
 pub fn help_for_grid() -> &'static str {
-    "Up/Down: scroll | Left: back | Esc: exit"
+    "Up/Down: scroll | Shift+Left/Right: order column | Shift+Up/Down: sort | Left: back | Esc: exit"
 }
 
 /// Help text while typing a directory path in the picker.
