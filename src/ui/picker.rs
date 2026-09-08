@@ -26,6 +26,8 @@ pub struct Picker {
     input: String,
     /// Databases found in the current directory.
     results: Vec<PathBuf>,
+    /// Relative display labels for `results`, built once when the scan runs.
+    labels: Vec<String>,
     /// Index of the highlighted database in `results`.
     selected: usize,
     /// Index of the first row shown in the database list (its scroll position).
@@ -43,6 +45,7 @@ impl Picker {
             state: PickerState::DirectoryInput,
             input: String::new(),
             results: Vec::new(),
+            labels: Vec::new(),
             selected: 0,
             scroll_offset: 0,
             list_height: 10,
@@ -135,6 +138,19 @@ impl Picker {
             }
             Ok(found) => {
                 self.results = found;
+                // Build the relative display labels once. The list reuses them
+                // on every draw, so it never strips prefixes again.
+                let root = Path::new(dir);
+                self.labels = self
+                    .results
+                    .iter()
+                    .map(|path| {
+                        path.strip_prefix(root)
+                            .unwrap_or(path)
+                            .display()
+                            .to_string()
+                    })
+                    .collect();
                 self.selected = 0;
                 self.scroll_offset = 0;
                 self.state = PickerState::DatabaseList;
@@ -270,25 +286,17 @@ impl Picker {
                     return;
                 }
                 let list_title = format!(" {} database(s) found ", self.results.len());
-                let root = self.input.trim();
                 let inner_height = rows[3].height.saturating_sub(2) as usize;
                 self.list_height = inner_height.max(1);
                 let len = self.results.len();
                 let start = self.scroll_offset.min(len);
                 let take = inner_height.min(len - start);
                 let visible: Vec<ListItem> = self
-                    .results
+                    .labels
                     .iter()
                     .skip(start)
                     .take(take)
-                    .map(|path| {
-                        let label = path
-                            .strip_prefix(root)
-                            .unwrap_or(path)
-                            .display()
-                            .to_string();
-                        ListItem::new(Text::raw(label))
-                    })
+                    .map(|label| ListItem::new(Text::raw(label.clone())))
                     .collect();
                 let list = List::new(visible)
                     .highlight_symbol("> ")

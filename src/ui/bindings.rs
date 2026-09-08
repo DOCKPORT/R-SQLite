@@ -44,37 +44,17 @@ pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
         return Some(Command::Quit);
     }
     let shifted = mods.contains(KeyModifiers::SHIFT);
-    match code {
-        KeyCode::Up => {
-            if shifted {
-                Some(Command::OrderDesc)
-            } else {
-                Some(Command::MoveUp)
-            }
-        }
-        KeyCode::Down => {
-            if shifted {
-                Some(Command::OrderAsc)
-            } else {
-                Some(Command::MoveDown)
-            }
-        }
-        KeyCode::Right => {
-            if shifted {
-                Some(Command::SortColumnRight)
-            } else {
-                Some(Command::Open)
-            }
-        }
-        KeyCode::Left => {
-            if shifted {
-                Some(Command::SortColumnLeft)
-            } else {
-                Some(Command::Back)
-            }
-        }
-        KeyCode::PageUp => Some(Command::PageUp),
-        KeyCode::PageDown => Some(Command::PageDown),
+    match (code, shifted) {
+        (KeyCode::Up, false) => Some(Command::MoveUp),
+        (KeyCode::Up, true) => Some(Command::OrderDesc),
+        (KeyCode::Down, false) => Some(Command::MoveDown),
+        (KeyCode::Down, true) => Some(Command::OrderAsc),
+        (KeyCode::Right, false) => Some(Command::Open),
+        (KeyCode::Right, true) => Some(Command::SortColumnRight),
+        (KeyCode::Left, false) => Some(Command::Back),
+        (KeyCode::Left, true) => Some(Command::SortColumnLeft),
+        (KeyCode::PageUp, _) => Some(Command::PageUp),
+        (KeyCode::PageDown, _) => Some(Command::PageDown),
         _ => None,
     }
 }

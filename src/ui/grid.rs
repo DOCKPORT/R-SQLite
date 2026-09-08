@@ -275,11 +275,12 @@ impl TableGrid {
             .collect();
 
         // Show the buffer from `scroll_top`, so the highlight stays in view.
+        // Build Row objects only for the visible slice; rows below the fold
+        // would be clipped anyway, so cloning them is wasted work.
         let view_start = self.scroll_top.min(self.buffer.len());
-        let rows: Vec<Row> = self
-            .buffer
+        let view_end = (view_start + self.viewport_rows.max(1)).min(self.buffer.len());
+        let rows: Vec<Row> = self.buffer[view_start..view_end]
             .iter()
-            .skip(view_start)
             .map(|cells| Row::new(cells.clone()))
             .collect();
 

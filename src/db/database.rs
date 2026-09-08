@@ -101,7 +101,9 @@ impl Database {
         let column_count = stmt.column_count();
         let mut query = stmt.query(params![limit, offset])?;
 
-        let mut out = Vec::new();
+        // Reserve the full window up front so a complete page avoids repeated
+        // reallocation as rows are pushed. `limit` is a small bounded page size.
+        let mut out = Vec::with_capacity(limit as usize);
         while let Some(row) = query.next()? {
             let mut cells = Vec::with_capacity(column_count);
             for index in 0..column_count {

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -20,7 +19,7 @@ pub type TuiTerminal = Terminal<Backend>;
 pub fn init() -> Result<TuiTerminal> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
@@ -29,11 +28,7 @@ pub fn init() -> Result<TuiTerminal> {
 /// Leave the alternate screen and restore normal terminal behaviour.
 pub fn restore(mut terminal: TuiTerminal) -> Result<()> {
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
 }

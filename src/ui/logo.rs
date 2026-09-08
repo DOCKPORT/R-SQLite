@@ -15,6 +15,10 @@ pub struct Logo {
 /// Load the logo and measure it.
 pub fn logo() -> Logo {
     let lines: Vec<&'static str> = LOGO.lines().map(str::trim_end).collect();
-    let width = lines.iter().map(|line| line.chars().count()).max().unwrap_or(0);
+    let width = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
     Logo { lines, width }
 }

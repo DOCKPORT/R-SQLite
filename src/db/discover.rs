@@ -57,7 +57,9 @@ fn is_sqlite_file(path: &Path) -> bool {
         return false;
     };
     let mut header = [0u8; 16];
-    if file.read(&mut header).unwrap_or(0) != SQLITE_HEADER.len() {
+    // read_exact fills the whole buffer or fails, so a short or unreadable
+    // file is simply not a database.
+    if file.read_exact(&mut header).is_err() {
         return false;
     }
     header == SQLITE_HEADER

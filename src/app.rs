@@ -82,45 +82,55 @@ impl App {
     }
 
     fn run_loop(&mut self, terminal: &mut TuiTerminal) -> Result<()> {
+        // Draw once, then redraw only when an event actually changed something.
+        // This avoids rebuilding the frame (and re-allocating its text) for
+        // ignored events such as dropped Ctrl/Alt keys or stray mouse moves.
+        let mut needs_redraw = true;
         while !self.should_quit {
-            terminal.draw(|frame| self.render(frame))?;
-            self.handle_events()?;
+            if needs_redraw {
+                terminal.draw(|frame| self.render(frame))?;
+            }
+            needs_redraw = self.handle_events()?;
         }
         Ok(())
     }
 
     /// Read one input event, map it to a command, and dispatch to the screen.
-    fn handle_events(&mut self) -> Result<()> {
-        let key = match event::read()? {
-            Event::Key(key) => key,
-            _ => return Ok(()),
-        };
+    /// Return whether the frame changed and must be redrawn.
+    fn handle_events(&mut self) -> Result<bool> {
+        match event::read()? {
+            // A size change requires a full redraw to re-layout the screens.
+            Event::Resize(_, _) => Ok(true),
+            Event::Key(key) => {
+                // Accept plain keys and shifted text (for example capital
+                // letters, which carry the SHIFT modifier). Drop Ctrl/Alt
+                // combinations so that only ordinary typing and navigation
+                // reach the screens.
+                if key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                {
+                    return Ok(false);
+                }
 
-        // Accept plain keys and shifted text (for example capital letters, which
-        // carry the SHIFT modifier). Drop Ctrl/Alt combinations so that only
-        // ordinary typing and navigation reach the screens.
-        if key
-            .modifiers
-            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-        {
-            return Ok(());
-        }
+                let Some(command) = self.map_command(key.code, key.modifiers) else {
+                    return Ok(false);
+                };
 
-        let Some(command) = self.map_command(key.code, key.modifiers) else {
-            return Ok(());
-        };
+                let action = if let Some(db) = self.db.as_ref() {
+                    match self.grid.as_mut() {
+                        Some(grid) => grid.handle(db, command),
+                        None => self.list.handle(command),
+                    }
+                } else {
+                    self.picker.handle(command)
+                };
 
-        let action = if let Some(db) = self.db.as_ref() {
-            match self.grid.as_mut() {
-                Some(grid) => grid.handle(db, command),
-                None => self.list.handle(command),
+                self.apply(action);
+                Ok(true)
             }
-        } else {
-            self.picker.handle(command)
-        };
-
-        self.apply(action);
-        Ok(())
+            _ => Ok(false),
+        }
     }
 
     /// Choose which key mapping applies. While the picker is accepting a typed
