@@ -168,7 +168,7 @@ impl App {
 
         let header = match &self.db {
             Some(_) => format!(" r-sqlite  {}", self.db_path),
-            None => " r-sqlite  — choose a database to open".to_string(),
+            None => "R-SQLite".to_string(),
         };
         frame.render_widget(Paragraph::new(Text::raw(header)), chunks[0]);
 

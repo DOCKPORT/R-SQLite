@@ -1,6 +1,7 @@
 pub mod action;
 pub mod bindings;
 pub mod grid;
+pub mod logo;
 pub mod picker;
 pub mod tables;
 pub mod tui;

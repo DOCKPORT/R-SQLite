@@ -108,5 +108,5 @@ pub fn help_for_picker_input() -> &'static str {
 
 /// Help text while choosing a database in the picker.
 pub fn help_for_picker_list() -> &'static str {
-    "Up/Down: move | Right: open | Left: change directory | Esc: exit"
+    "Up/Down: move | PgUp/PgDn: 50 | Right: open | Left: change directory | Esc: exit"
 }

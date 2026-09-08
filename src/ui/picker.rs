@@ -4,9 +4,12 @@ use crate::ui::bindings::{self, Command};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Text;
+use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use std::path::{Path, PathBuf};
+
+/// How many rows one page key jumps in the database list.
+const PAGE_STEP: isize = 50;
 
 /// Where the picker is in its flow.
 enum PickerState {
@@ -105,9 +108,15 @@ impl Picker {
             Command::SortColumnLeft
             | Command::SortColumnRight
             | Command::OrderAsc
-            | Command::OrderDesc
-            | Command::PageUp
-            | Command::PageDown => None,
+            | Command::OrderDesc => None,
+            Command::PageUp => {
+                self.jump_selection(-PAGE_STEP, true);
+                None
+            }
+            Command::PageDown => {
+                self.jump_selection(PAGE_STEP, false);
+                None
+            }
             Command::Quit => Some(Action::Quit),
         }
     }
@@ -148,6 +157,23 @@ impl Picker {
         self.keep_selected_visible();
     }
 
+    /// Jump the selection by a page and anchor it to the top or bottom row.
+    fn jump_selection(&mut self, delta: isize, anchor_top: bool) {
+        if self.results.is_empty() {
+            return;
+        }
+        let len = self.results.len();
+        let next = self.selected as isize + delta;
+        self.selected = next.clamp(0, len as isize - 1) as usize;
+        let height = self.list_height.max(1);
+        let max_offset = len.saturating_sub(height);
+        self.scroll_offset = if anchor_top {
+            self.selected.min(max_offset)
+        } else {
+            (self.selected + 1).saturating_sub(height).min(max_offset)
+        };
+    }
+
     /// Move the list so the highlight stays inside the visible area, scrolling
     /// only when the highlight would leave it. This mirrors the row grid.
     fn keep_selected_visible(&mut self) {
@@ -163,6 +189,35 @@ impl Picker {
             self.scroll_offset = self.selected + 1 - height;
         }
         self.scroll_offset = self.scroll_offset.clamp(0, max_offset);
+    }
+
+    /// Draw the plain-text logo, centred in the available empty area.
+    fn draw_logo(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        let art = crate::ui::logo::logo();
+        let art_rows = art.lines.len() as u16;
+        let top_pad = if art_rows < area.height {
+            (area.height - art_rows) / 2
+        } else {
+            0
+        };
+        let left_pad = if (art.width as u16) < area.width {
+            (area.width - art.width as u16) / 2
+        } else {
+            0
+        };
+
+        let mut lines: Vec<Line> = (0..top_pad).map(|_| Line::raw("")).collect();
+        for line in &art.lines {
+            lines.push(Line::raw(format!(
+                "{}{}",
+                " ".repeat(left_pad as usize),
+                line
+            )));
+        }
+        frame.render_widget(Paragraph::new(Text::from(lines)), area);
     }
 
     /// Draw the picker into the given area.
@@ -205,15 +260,7 @@ impl Picker {
         );
 
         match self.state {
-            PickerState::DirectoryInput => {
-                frame.render_widget(
-                    Paragraph::new(Text::raw(
-                        "Examples: /home/user/.local/share/App/data   /var/lib/app   .",
-                    ))
-                    .style(Style::default().fg(Color::DarkGray)),
-                    rows[3],
-                );
-            }
+            PickerState::DirectoryInput => self.draw_logo(rows[3], frame),
             PickerState::DatabaseList => {
                 if self.results.is_empty() {
                     frame.render_widget(
