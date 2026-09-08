@@ -108,10 +108,7 @@ impl Picker {
                 self.move_selection(1);
                 None
             }
-            Command::SortColumnLeft
-            | Command::SortColumnRight
-            | Command::OrderAsc
-            | Command::OrderDesc => None,
+            Command::SortColumnLeft | Command::SortColumnRight | Command::OrderToggle => None,
             Command::PageUp => {
                 self.jump_selection(-PAGE_STEP, true);
                 None

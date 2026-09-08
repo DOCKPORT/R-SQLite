@@ -99,12 +99,8 @@ impl TableGrid {
                 self.move_sort_col(db, 1);
                 None
             }
-            Command::OrderAsc => {
-                self.set_order(db, Order::Asc);
-                None
-            }
-            Command::OrderDesc => {
-                self.set_order(db, Order::Desc);
+            Command::OrderToggle => {
+                self.toggle_order(db);
                 None
             }
             Command::PageUp => {
@@ -194,6 +190,19 @@ impl TableGrid {
         }
         self.order = Some(direction);
         self.reset_to_top(db);
+    }
+
+    /// Flip the sort direction, defaulting to descending when sorting is off.
+    fn toggle_order(&mut self, db: &Database) {
+        if self.columns.is_empty() {
+            return;
+        }
+        let next = if self.order == Some(Order::Desc) {
+            Order::Asc
+        } else {
+            Order::Desc
+        };
+        self.set_order(db, next);
     }
 
     /// Clear the loaded window and go back to the first sorted row.

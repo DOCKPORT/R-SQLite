@@ -20,10 +20,8 @@ pub enum Command {
     SortColumnLeft,
     /// Pick the next column as the sort key.
     SortColumnRight,
-    /// Sort the grid ascending (oldest first) by the chosen column.
-    OrderAsc,
-    /// Sort the grid descending (newest first) by the chosen column.
-    OrderDesc,
+    /// Toggle the sort direction on the chosen column.
+    OrderToggle,
     /// Jump 50 rows up.
     PageUp,
     /// Jump 50 rows down.
@@ -35,24 +33,25 @@ pub enum Command {
 /// Map a key to a [`Command`]. Keys not listed do nothing.
 ///
 /// `Esc` is the single exit key. Plain arrows move/scroll and confirm. Holding
-/// Shift changes meaning: Shift+Left/Right pick the sort column and
-/// Shift+Up/Down set the sort direction. PgUp/PgDn (with or without Shift) jump
-/// 50 rows, since many terminals do not report Shift on those keys. `Enter` is
-/// left unmapped here: it is only used to submit the directory path while typing.
+/// Shift with Left/Right picks the sort column. `Space` toggles the sort
+/// direction on the chosen column. Many terminals drop the Shift modifier on
+/// Up/Down, so Space is used instead of Shift+Up/Down. PgUp/PgDn (with or
+/// without Shift) jump 50 rows, since many terminals do not report Shift on
+/// those keys. `Enter` is left unmapped here: it is only used to submit the
+/// directory path while typing.
 pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
     if code == KeyCode::Esc {
         return Some(Command::Quit);
     }
     let shifted = mods.contains(KeyModifiers::SHIFT);
     match (code, shifted) {
-        (KeyCode::Up, false) => Some(Command::MoveUp),
-        (KeyCode::Up, true) => Some(Command::OrderDesc),
-        (KeyCode::Down, false) => Some(Command::MoveDown),
-        (KeyCode::Down, true) => Some(Command::OrderAsc),
+        (KeyCode::Up, _) => Some(Command::MoveUp),
+        (KeyCode::Down, _) => Some(Command::MoveDown),
         (KeyCode::Right, false) => Some(Command::Open),
         (KeyCode::Right, true) => Some(Command::SortColumnRight),
         (KeyCode::Left, false) => Some(Command::Back),
         (KeyCode::Left, true) => Some(Command::SortColumnLeft),
+        (KeyCode::Char(' '), false) => Some(Command::OrderToggle),
         (KeyCode::PageUp, _) => Some(Command::PageUp),
         (KeyCode::PageDown, _) => Some(Command::PageDown),
         _ => None,
@@ -73,12 +72,12 @@ pub fn command_for_text_key(code: KeyCode, _mods: KeyModifiers) -> Option<Comman
 
 /// Help text for the table list footer.
 pub fn help_for_list() -> &'static str {
-    "Up/Down: move | Right: open | Left: change database | Esc: exit"
+    "↑/↓: scroll | →: open | ←: change database | Esc: exit"
 }
 
 /// Help text for the row grid footer.
 pub fn help_for_grid() -> &'static str {
-    "Up/Down: scroll | PgUp/PgDn: 50 rows | Shift+arrows: column+sort | Left: back | Esc: exit"
+    "↑/↓: scroll | PgUp/PgDn: 50 rows | Shift+←/→: sort column | Space: sort direction | ←: back | Esc: exit"
 }
 
 /// Help text while typing a directory path in the picker.
@@ -88,5 +87,5 @@ pub fn help_for_picker_input() -> &'static str {
 
 /// Help text while choosing a database in the picker.
 pub fn help_for_picker_list() -> &'static str {
-    "Up/Down: move | PgUp/PgDn: 50 | Right: open | Left: change directory | Esc: exit"
+    "↑/↓: scroll | PgUp/PgDn: 50 | →: open | ←: change directory | Esc: exit"
 }
