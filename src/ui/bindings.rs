@@ -22,6 +22,8 @@ pub enum Command {
     SortColumnRight,
     /// Toggle the sort direction on the chosen column.
     OrderToggle,
+    /// Begin editing the search term for the current table.
+    StartSearch,
     /// Jump 50 rows up.
     PageUp,
     /// Jump 50 rows down.
@@ -52,6 +54,7 @@ pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
         (KeyCode::Left, false) => Some(Command::Back),
         (KeyCode::Left, true) => Some(Command::SortColumnLeft),
         (KeyCode::Char(' '), false) => Some(Command::OrderToggle),
+        (KeyCode::Char('s'), false) => Some(Command::StartSearch),
         (KeyCode::PageUp, _) => Some(Command::PageUp),
         (KeyCode::PageDown, _) => Some(Command::PageDown),
         _ => None,
@@ -70,6 +73,21 @@ pub fn command_for_text_key(code: KeyCode, _mods: KeyModifiers) -> Option<Comman
     }
 }
 
+/// Map a key to a [`Command`] while the user is typing a search term in the
+/// row grid. Characters edit the term live; Backspace removes a character;
+/// Enter commits the search; Left clears the search and returns to the full
+/// table. Esc still exits the application, matching every other screen.
+pub fn command_for_search_key(code: KeyCode, _mods: KeyModifiers) -> Option<Command> {
+    match code {
+        KeyCode::Esc => Some(Command::Quit),
+        KeyCode::Char(c) if !c.is_control() => Some(Command::Type(c)),
+        KeyCode::Backspace => Some(Command::EraseChar),
+        KeyCode::Enter => Some(Command::Open),
+        KeyCode::Left => Some(Command::Back),
+        _ => None,
+    }
+}
+
 /// Help text for the table list footer.
 pub fn help_for_list() -> &'static str {
     "↑/↓: scroll | →: open | ←: change database | Esc: exit"
@@ -77,7 +95,7 @@ pub fn help_for_list() -> &'static str {
 
 /// Help text for the row grid footer.
 pub fn help_for_grid() -> &'static str {
-    "↑/↓: scroll | PgUp/PgDn: 50 rows | Shift+←/→: sort column | Space: sort direction | ←: back | Esc: exit"
+    "↑/↓: scroll | PgUp/PgDn: 50 rows | Shift+←/→: sort column | Space: sort direction | s: search | ←: back | Esc: exit"
 }
 
 /// Help text while typing a directory path in the picker.

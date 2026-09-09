@@ -8,7 +8,7 @@ R-SQLite is a TUI SQLite database viewer written in Rust. The user will be able 
 - List all tables (and other schema objects) in the database
 - Browse the rows of a selected table in a read-only grid
 - Show table structure in the grid (column names and types)
-- Search across the content of the current table (Will be added in v1.1.0)
+- Search across the content of the current table (Will be released with v1.1.0)
 
 
 ## Read-Only Constraint

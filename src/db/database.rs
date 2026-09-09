@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use rusqlite::types::ValueRef;
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, params, params_from_iter};
 use std::path::Path;
 
 /// A single column of a table: its name.
@@ -95,6 +95,136 @@ impl Database {
         self.fetch_window(&sql, offset, limit)
     }
 
+    /// Number of rows whose text contains `term` in any column.
+    ///
+    /// The match is a case-insensitive substring scan done by SQLite `LIKE`.
+    /// When `term` is empty every row matches, mirroring an unfiltered view.
+    pub fn search_count(&self, table: &str, term: &str) -> Result<i64> {
+        if term.is_empty() {
+            return self.row_count(table);
+        }
+        let (condition, column_count) = self.like_condition(table)?;
+        if column_count == 0 {
+            return self.row_count(table);
+        }
+        let sql = format!(
+            "SELECT count(*) FROM {} WHERE {}",
+            quote_ident(table),
+            condition
+        );
+        let params = vec![like_pattern(term); column_count];
+        self.conn
+            .query_row(&sql, params_from_iter(params.iter()), |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(Into::into)
+    }
+
+    /// Fetch a window of rows that contain `term`, in natural order.
+    pub fn search_rows(
+        &self,
+        table: &str,
+        term: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Vec<String>>> {
+        let (condition, column_count) = self.like_condition(table)?;
+        if column_count == 0 || term.is_empty() {
+            return self.rows(table, offset, limit);
+        }
+        let sql = format!(
+            "SELECT * FROM {} WHERE {} LIMIT ?{} OFFSET ?{}",
+            quote_ident(table),
+            condition,
+            column_count + 1,
+            column_count + 2
+        );
+        self.fetch_filtered(&sql, term, column_count, offset, limit)
+    }
+
+    /// Fetch a window of matching rows ordered by one column.
+    ///
+    /// The `WHERE` filters first and the `ORDER BY` sorts the filtered set, so
+    /// the offset indexes into the matching rows only.
+    pub fn search_rows_sorted(
+        &self,
+        table: &str,
+        term: &str,
+        column: &str,
+        ascending: bool,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Vec<String>>> {
+        let (condition, column_count) = self.like_condition(table)?;
+        if column_count == 0 || term.is_empty() {
+            return self.rows_sorted(table, column, ascending, offset, limit);
+        }
+        let dir = if ascending { "ASC" } else { "DESC" };
+        let sql = format!(
+            "SELECT * FROM {} WHERE {} ORDER BY {} {} LIMIT ?{} OFFSET ?{}",
+            quote_ident(table),
+            condition,
+            quote_ident(column),
+            dir,
+            column_count + 1,
+            column_count + 2
+        );
+        self.fetch_filtered(&sql, term, column_count, offset, limit)
+    }
+
+    /// Run a filtered LIMIT/OFFSET window query and render each row as text.
+    ///
+    /// The filter patterns fill the leading `?` placeholders, then `offset`
+    /// and `limit` fill the trailing ones.
+    fn fetch_filtered(
+        &self,
+        sql: &str,
+        term: &str,
+        column_count: usize,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Vec<String>>> {
+        let pattern = like_pattern(term);
+        let mut values: Vec<rusqlite::types::Value> = Vec::with_capacity(column_count + 2);
+        for _ in 0..column_count {
+            values.push(pattern.clone().into());
+        }
+        values.push(limit.into());
+        values.push(offset.into());
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let columns = stmt.column_count();
+        let mut query = stmt.query(params_from_iter(values.iter()))?;
+
+        let mut out = Vec::with_capacity(limit as usize);
+        while let Some(row) = query.next()? {
+            let mut cells = Vec::with_capacity(columns);
+            for index in 0..columns {
+                cells.push(cell_text(row.get_ref(index)?));
+            }
+            out.push(cells);
+        }
+        Ok(out)
+    }
+
+    /// Build a `col LIKE ? OR col LIKE ? ...` clause for every column of `table`.
+    ///
+    /// Returns the clause plus the number of columns (one bound pattern each).
+    fn like_condition(&self, table: &str) -> Result<(String, usize)> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")?;
+        let names = stmt
+            .query_map(params![table], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let column_count = names.len();
+        let parts: Vec<String> = names
+            .iter()
+            .map(|name| format!("{} LIKE ? ESCAPE '\\'", quote_ident(name)))
+            .collect();
+        Ok((parts.join(" OR "), column_count))
+    }
+
     /// Run a LIMIT/OFFSET window query and render each row as text.
     fn fetch_window(&self, sql: &str, offset: i64, limit: i64) -> Result<Vec<Vec<String>>> {
         let mut stmt = self.conn.prepare(sql)?;
@@ -138,4 +268,20 @@ fn quote_ident(name: &str) -> String {
     }
     quoted.push('"');
     quoted
+}
+
+/// Wrap a search term as a `LIKE` pattern, escaping `%`, `_`, and `\` so the
+/// term is matched literally rather than as wildcards.
+fn like_pattern(term: &str) -> String {
+    let mut escaped = String::with_capacity(term.len() + 2);
+    for ch in term.chars() {
+        match ch {
+            '%' | '_' | '\\' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            other => escaped.push(other),
+        }
+    }
+    format!("%{escaped}%")
 }

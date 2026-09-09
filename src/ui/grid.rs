@@ -53,6 +53,10 @@ pub struct TableGrid {
     sort_col: usize,
     /// The active sort direction, if sorting is on.
     order: Option<Order>,
+    /// Current search filter term. Empty means no filter.
+    search: String,
+    /// True while the user is editing the search term in the footer.
+    searching: bool,
 }
 
 impl TableGrid {
@@ -71,6 +75,8 @@ impl TableGrid {
             viewport_rows: 20,
             sort_col: 0,
             order: None,
+            search: String::new(),
+            searching: false,
         };
         grid.reload(db);
         grid
@@ -80,6 +86,45 @@ impl TableGrid {
     /// screen. Key-to-command mapping lives in the bindings module.
     pub fn handle(&mut self, db: &Database, command: Command) -> Option<Action> {
         match command {
+            Command::Type(ch) => {
+                // Characters arrive while editing the search term.
+                if self.searching {
+                    self.search.push(ch);
+                    self.apply_filter(db);
+                }
+                None
+            }
+            Command::EraseChar => {
+                if self.searching {
+                    self.search.pop();
+                    self.apply_filter(db);
+                }
+                None
+            }
+            Command::Open => {
+                // Enter commits the search term and stops editing. A non-empty
+                // term stays applied; an empty term shows the full table.
+                self.searching = false;
+                None
+            }
+            Command::StartSearch => {
+                // 's' re-opens the editor for the current term (to refine it)
+                // or starts a new one. The grid keeps any existing filter.
+                self.searching = true;
+                None
+            }
+            Command::Back => {
+                // Left while a search is active clears it and shows the full
+                // table. Only a clear grid returns to the table list.
+                if self.searching || !self.search.is_empty() {
+                    self.searching = false;
+                    self.search.clear();
+                    self.apply_filter(db);
+                    None
+                } else {
+                    Some(Action::BackToList)
+                }
+            }
             Command::MoveUp => {
                 self.move_rows(db, -1);
                 None
@@ -88,9 +133,6 @@ impl TableGrid {
                 self.move_rows(db, 1);
                 None
             }
-            Command::Open => None,
-            Command::Back => Some(Action::BackToList),
-            Command::Type(_) | Command::EraseChar => None,
             Command::SortColumnLeft => {
                 self.move_sort_col(db, -1);
                 None
@@ -128,6 +170,16 @@ impl TableGrid {
     /// Total number of rows in the table.
     pub fn total(&self) -> i64 {
         self.total
+    }
+
+    /// True while the search term is being edited in the footer.
+    pub fn searching(&self) -> bool {
+        self.searching
+    }
+
+    /// The current search term (empty when no filter is applied).
+    pub fn search_term(&self) -> &str {
+        &self.search
     }
 
     /// Move the highlight by one row and keep it inside the visible window.
@@ -214,6 +266,18 @@ impl TableGrid {
         self.reload(db);
     }
 
+    /// Re-run the search filter: refresh the count and jump to the top result.
+    ///
+    /// Called after every keystroke so the grid and footer update live.
+    fn apply_filter(&mut self, db: &Database) {
+        self.total = if self.search.is_empty() {
+            db.row_count(&self.table).unwrap_or(0)
+        } else {
+            db.search_count(&self.table, &self.search).unwrap_or(0)
+        };
+        self.reset_to_top(db);
+    }
+
     /// Reload the buffer when the cursor moves outside the loaded window.
     fn reload(&mut self, db: &Database) {
         let buffer_len = self.buffer.len() as i64;
@@ -230,18 +294,28 @@ impl TableGrid {
     }
 
     /// Fetch one window, ordered by the active sort when one is set.
+    ///
+    /// When a search filter is active, the window comes from the filtered set.
     fn query_rows(&self, db: &Database, start: i64) -> anyhow::Result<Vec<Vec<String>>> {
-        match self.order {
-            Some(Order::Asc) | Some(Order::Desc) => {
-                let column = self
-                    .columns
-                    .get(self.sort_col)
-                    .map(|c| c.name.as_str())
-                    .unwrap_or("");
+        let column = self
+            .columns
+            .get(self.sort_col)
+            .map(|c| c.name.as_str())
+            .unwrap_or("");
+        let filtered = !self.search.is_empty();
+        match (self.order, filtered) {
+            (Some(Order::Asc), true) => {
+                db.search_rows_sorted(&self.table, &self.search, column, true, start, PAGE_ROWS)
+            }
+            (Some(Order::Desc), true) => {
+                db.search_rows_sorted(&self.table, &self.search, column, false, start, PAGE_ROWS)
+            }
+            (Some(_), false) => {
                 let ascending = self.order == Some(Order::Asc);
                 db.rows_sorted(&self.table, column, ascending, start, PAGE_ROWS)
             }
-            None => db.rows(&self.table, start, PAGE_ROWS),
+            (None, true) => db.search_rows(&self.table, &self.search, start, PAGE_ROWS),
+            (None, false) => db.rows(&self.table, start, PAGE_ROWS),
         }
     }
 

@@ -135,13 +135,19 @@ impl App {
 
     /// Choose which key mapping applies. While the picker is accepting a typed
     /// directory, characters and editing keys go through the text mapping so
-    /// that, for example, `x` types a letter instead of quitting.
+    /// that, for example, `x` types a letter instead of quitting. While the row
+    /// grid is editing a search term, characters go through the search mapping
+    /// so they refine the query instead of starting commands.
     fn map_command(&self, code: KeyCode, mods: KeyModifiers) -> Option<Command> {
         if self.db.is_none() && self.picker.is_typing() {
-            bindings::command_for_text_key(code, mods)
-        } else {
-            bindings::command_for_key(code, mods)
+            return bindings::command_for_text_key(code, mods);
         }
+        if let Some(grid) = self.grid.as_ref()
+            && grid.searching()
+        {
+            return bindings::command_for_search_key(code, mods);
+        }
+        bindings::command_for_key(code, mods)
     }
 
     /// Carry out an action returned by the active screen.
@@ -191,8 +197,22 @@ impl App {
             self.picker.draw(frame, chunks[1]);
         }
 
-        let footer = self.footer_text();
+        // While a search term is being typed, replace the footer with the
+        // search input and park a visible cursor at the end of the term.
+        let (footer, cursor_x) = match self.grid.as_ref() {
+            Some(grid) if grid.searching() => {
+                let prefix = " /search: ";
+                let term = grid.search_term();
+                let x = chunks[2].x + (prefix.chars().count() + term.chars().count()) as u16;
+                (format!("{prefix}{term}"), Some(x))
+            }
+            _ => (self.footer_text(), None),
+        };
         frame.render_widget(Paragraph::new(Text::raw(footer)), chunks[2]);
+        if let Some(x) = cursor_x {
+            let x = x.min(chunks[2].right().saturating_sub(1));
+            frame.set_cursor(x, chunks[2].y);
+        }
     }
 
     fn footer_text(&self) -> String {
