@@ -177,8 +177,8 @@ impl App {
             .split(frame.size());
 
         let header = match &self.db {
-            Some(_) => format!(" r-sqlite  {}", self.db_path),
-            None => "R-SQLite".to_string(),
+            Some(_) => format!(" r-sqlite v{}  {}", env!("CARGO_PKG_VERSION"), self.db_path),
+            None => format!("R-SQLite v{}", env!("CARGO_PKG_VERSION")),
         };
         frame.render_widget(Paragraph::new(Text::raw(header)), chunks[0]);
 
