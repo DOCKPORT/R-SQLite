@@ -1,4 +1,4 @@
-`Project is in early stages of development.`
+`1.0.0 binary first stable release will be out soon.` 
 
 ## Repo Overview
 R-SQLite is a terminal (TUI) SQLite database viewer written in Rust. It opens a SQLite database file and lets the user explore its content. The user can list the tables, browse the rows of a selected table, and view all content of the database.
@@ -25,3 +25,9 @@ The tool is a viewer and an analysis tool. It never can modify the database. SQL
 | Terminal Backend | crossterm |
 | SQLite Access | rusqlite |
 
+
+## Screenshots
+
+![R-SQLITE](screenshots/Screenshot_2026-09-09_00-47-15.png)
+
+![R-SQLITE](screenshots/Screenshot_2026-09-09_00-48-48.png)
