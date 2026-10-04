@@ -113,6 +113,7 @@ impl TableGrid {
                 self.searching = true;
                 None
             }
+            Command::OpenRecent => None,
             Command::Back => {
                 // Left while a search is active clears it and shows the full
                 // table. Only a clear grid returns to the table list.

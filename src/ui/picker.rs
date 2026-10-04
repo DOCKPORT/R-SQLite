@@ -1,4 +1,5 @@
 use crate::db::discover::sqlite_files;
+use crate::store::RecentPaths;
 use crate::ui::Action;
 use crate::ui::bindings::{self, Command};
 use ratatui::Frame;
@@ -36,6 +37,10 @@ pub struct Picker {
     list_height: usize,
     /// Message shown under the input (guidance, errors, or counts).
     status: Option<String>,
+    /// The recent directories, loaded from disk and saved on each new scan.
+    recents: RecentPaths,
+    /// Index of the highlighted recent directory, when one is selected.
+    recent_selected: Option<usize>,
 }
 
 impl Picker {
@@ -50,6 +55,8 @@ impl Picker {
             scroll_offset: 0,
             list_height: 10,
             status: Some("Paste a directory path, then press Enter.".to_string()),
+            recents: RecentPaths::load(),
+            recent_selected: None,
         }
     }
 
@@ -78,11 +85,14 @@ impl Picker {
             Command::Type(ch) => {
                 self.input.push(ch);
                 self.status = None;
+                // Typing returns focus from a recent entry back to the input.
+                self.recent_selected = None;
                 None
             }
             Command::EraseChar => {
                 self.input.pop();
                 self.status = None;
+                self.recent_selected = None;
                 None
             }
             Command::Open => match self.state {
@@ -91,6 +101,10 @@ impl Picker {
                     .results
                     .get(self.selected)
                     .map(|path| Action::PickDatabase(path.display().to_string())),
+            },
+            Command::OpenRecent => match self.state {
+                PickerState::DirectoryInput => self.open_recent(),
+                PickerState::DatabaseList => None,
             },
             Command::Back => match self.state {
                 PickerState::DatabaseList => {
@@ -101,11 +115,17 @@ impl Picker {
                 PickerState::DirectoryInput => None,
             },
             Command::MoveUp => {
-                self.move_selection(-1);
+                match self.state {
+                    PickerState::DirectoryInput => self.move_recent(-1),
+                    PickerState::DatabaseList => self.move_selection(-1),
+                }
                 None
             }
             Command::MoveDown => {
-                self.move_selection(1);
+                match self.state {
+                    PickerState::DirectoryInput => self.move_recent(1),
+                    PickerState::DatabaseList => self.move_selection(1),
+                }
                 None
             }
             Command::SortColumnLeft
@@ -155,6 +175,9 @@ impl Picker {
                 self.scroll_offset = 0;
                 self.state = PickerState::DatabaseList;
                 self.status = None;
+                // Remember the scanned directory so it can be reused later.
+                self.recents.add(dir);
+                self.recent_selected = None;
                 None
             }
             Err(err) => {
@@ -162,6 +185,27 @@ impl Picker {
                 None
             }
         }
+    }
+
+    /// Reopen the highlighted recent directory by rescanning it. When no
+    /// recent is highlighted, nothing happens.
+    fn open_recent(&mut self) -> Option<Action> {
+        let index = self.recent_selected?;
+        let path = self.recents.entries().get(index).cloned()?;
+        self.input = path;
+        self.scan_directory()
+    }
+
+    /// Move the recent-directory highlight by `delta`, clamped to the list.
+    fn move_recent(&mut self, delta: isize) {
+        let len = self.recents.entries().len();
+        if len == 0 {
+            self.recent_selected = None;
+            return;
+        }
+        let current = self.recent_selected.unwrap_or(0) as isize;
+        let next = (current + delta).clamp(0, len as isize - 1);
+        self.recent_selected = Some(next as usize);
     }
 
     fn move_selection(&mut self, delta: isize) {
@@ -205,6 +249,31 @@ impl Picker {
             self.scroll_offset = self.selected + 1 - height;
         }
         self.scroll_offset = self.scroll_offset.clamp(0, max_offset);
+    }
+
+    /// Draw the recent directories as a selectable list. The highlighted entry
+    /// is reopened with Right.
+    fn draw_recents(&mut self, area: Rect, frame: &mut Frame<'_>) {
+        if area.width == 0 || area.height == 0 {
+            return;
+        }
+        let entries = self.recents.entries();
+        let items: Vec<ListItem> = entries
+            .iter()
+            .map(|path| ListItem::new(Text::raw(path.clone())))
+            .collect();
+        let title = format!(" Recent directories ({}) ", entries.len());
+        let list = List::new(items)
+            .highlight_symbol("> ")
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .block(Block::default().borders(Borders::ALL).title(title));
+        let mut state = ListState::default();
+        state.select(self.recent_selected);
+        frame.render_stateful_widget(list, area, &mut state);
     }
 
     /// Draw the plain-text logo, centred in the available empty area.
@@ -276,7 +345,24 @@ impl Picker {
         );
 
         match self.state {
-            PickerState::DirectoryInput => self.draw_logo(rows[3], frame),
+            PickerState::DirectoryInput => {
+                // Keep the logo. When recent directories exist, reserve a
+                // bordered list at the bottom and give the rest to the logo.
+                let count = self.recents.entries().len();
+                let list_height = if count == 0 {
+                    0
+                } else {
+                    (count + 2).min(rows[3].height as usize) as u16
+                };
+                let parts = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Min(0), Constraint::Length(list_height)])
+                    .split(rows[3]);
+                self.draw_logo(parts[0], frame);
+                if list_height > 0 {
+                    self.draw_recents(parts[1], frame);
+                }
+            }
             PickerState::DatabaseList => {
                 if self.results.is_empty() {
                     frame.render_widget(

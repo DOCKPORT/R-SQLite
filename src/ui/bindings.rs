@@ -10,6 +10,8 @@ pub enum Command {
     MoveDown,
     /// Open the selected item.
     Open,
+    /// Reopen the highlighted recent directory (picker only).
+    OpenRecent,
     /// Go back to the previous screen.
     Back,
     /// Insert one typed character (text entry only).
@@ -63,12 +65,17 @@ pub fn command_for_key(code: KeyCode, mods: KeyModifiers) -> Option<Command> {
 
 /// Map a key to a [`Command`] while the user is typing free text (for example
 /// a directory path). Esc still exits; every character is inserted as text.
+/// Up and Down move the highlight over the recent directories, and Right
+/// reopens the highlighted one, so a saved path can be reused without retyping.
 pub fn command_for_text_key(code: KeyCode, _mods: KeyModifiers) -> Option<Command> {
     match code {
         KeyCode::Esc => Some(Command::Quit),
         KeyCode::Char(c) if !c.is_control() => Some(Command::Type(c)),
         KeyCode::Backspace => Some(Command::EraseChar),
         KeyCode::Enter => Some(Command::Open),
+        KeyCode::Up => Some(Command::MoveUp),
+        KeyCode::Down => Some(Command::MoveDown),
+        KeyCode::Right => Some(Command::OpenRecent),
         _ => None,
     }
 }
@@ -100,7 +107,7 @@ pub fn help_for_grid() -> &'static str {
 
 /// Help text while typing a directory path in the picker.
 pub fn help_for_picker_input() -> &'static str {
-    "type a directory | Backspace: delete | Enter: scan | Esc: exit"
+    "type a directory | Backspace: delete | Enter: scan | \u{2191}/\u{2193} then \u{2192}: recent | Esc: exit"
 }
 
 /// Help text while choosing a database in the picker.

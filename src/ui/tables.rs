@@ -44,7 +44,9 @@ impl TableList {
                 .cloned()
                 .map(Action::OpenTable),
             Command::Back => Some(Action::BackToPicker),
-            Command::Type(_) | Command::EraseChar | Command::StartSearch => None,
+            Command::Type(_) | Command::EraseChar | Command::StartSearch | Command::OpenRecent => {
+                None
+            }
             Command::SortColumnLeft
             | Command::SortColumnRight
             | Command::OrderToggle
