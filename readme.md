@@ -26,7 +26,7 @@ The tool is a viewer and an analysis tool. It never can modify the database. SQL
 
 ## Screenshots
 
-![R-SQLITE](screenshots/Screenshot_2026-09-09_00-47-15.png)
+![R-SQLITE](screenshots/view1.2.png)
 
 ![R-SQLITE](screenshots/Screenshot_2026-09-09_00-48-48.png)
 
