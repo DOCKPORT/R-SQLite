@@ -32,9 +32,9 @@ The tool is a viewer and an analysis tool. It never can modify the database. SQL
 ![R-SQLITE](screenshots/Screenshot_2026-09-09_00-48-48.png)
 
 
-## How to run 
+## How to Run
 
-- The binary release is only for Linux x86_84 systems. 
-- You can set the binary in a directory and make it exectuable. 
-- From there you can create a desktop entry to run the binary with a click. 
-- Or you could run via a terminal in various ways. 
+- Binary releases are currently available only for Linux x86_64 systems.
+- Place the binary in a directory and make it executable.
+- Optionally, create a desktop entry so you can launch it with a click.
+- Alternatively, run it from a terminal in several ways.
